@@ -131,10 +131,33 @@ const useNotifications = (sessionId, setSessionId) => {
         }
     }, [sessionId]);
 
+    const markAsReadNotification = useCallback(async (id) => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications/${id}/read`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Session-ID': sessionId
+                },
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (err) {
+            console.error('Failed to create notification:', err);
+            throw err;
+        }
+    }, [sessionId]);
+
     return {
         notifications,
         fetchNotifications,
         createNotification,
+        markAsReadNotification,
         isConnected,
         connectionError,
         socketId: socket?.id

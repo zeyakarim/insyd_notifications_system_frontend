@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import useNotifications from './hooks/useNotifications';
 import { motion, AnimatePresence } from 'framer-motion';
+import toast, { Toaster } from 'react-hot-toast';
 
 const Home = () => {
   const [sessionId, setSessionId] = useState('');
@@ -16,7 +17,7 @@ const Home = () => {
     fetchNotifications,
     createNotification,
     isConnected,
-    markAsRead,
+    markAsReadNotification,
     deleteNotification,
   } = useNotifications(sessionId, setSessionId);
 
@@ -44,10 +45,10 @@ const Home = () => {
   useEffect(() => {
     init();
   }, [init]);
-
+  
   const handleInteraction = async (type) => {
     if (!sessionId) {
-      console.warn('No session ID yet.');
+      toast.error('Please wait while we establish your session');
       return;
     }
 
@@ -60,28 +61,55 @@ const Home = () => {
 
     try {
       setCreating(true);
-      await createNotification(type, textMap[type]);
-      await fetchNotifications();
+      toast.promise(
+        createNotification(type, textMap[type]),
+        {
+          loading: 'Sending notification...',
+          success: () => {
+            fetchNotifications(); // Refresh notifications
+            return `${type.charAt(0).toUpperCase() + type.slice(1)} notification sent!`;
+          },
+          error: (err) => `Failed to send: ${err.message}`,
+        }
+      );
     } catch (error) {
       console.error('Interaction failed:', error);
+      toast.error(`Action failed: ${error.message}`);
     } finally {
       setCreating(false);
     }
   };
 
-  const handleNotificationClick = async (id) => {
+  const handleNotificationClick = async (id) => {    
     if (expandedNotification === id) {
       setExpandedNotification(null);
     } else {
       setExpandedNotification(id);
-      await markAsRead(id);
+      try {
+        await markAsReadNotification(id);
+        toast.success('Marked as read', {
+          icon: '👌',
+          position: 'top-right',
+        });
+        fetchNotifications();
+      } catch (error) {
+        toast.error('Failed to mark as read');
+      }
     }
   };
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    await deleteNotification(id);
-    await fetchNotifications();
+    try {
+      await deleteNotification(id);
+      await fetchNotifications();
+      toast.success('Notification deleted', {
+        icon: '🗑️',
+        position: 'top-right',
+      });
+    } catch (error) {
+      toast.error('Failed to delete notification');
+    }
   };
 
   const getTypeIcon = (type) => {
@@ -117,13 +145,40 @@ const Home = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Floating Header */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          className: '',
+          style: {
+            border: '1px solid #e5e7eb',
+            padding: '12px 16px',
+            color: '#1f2937',
+            background: 'white',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10B981',
+              secondary: 'white',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#EF4444',
+              secondary: 'white',
+            },
+          },
+        }}
+      />
+
       <motion.header 
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.5 }}
-        className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-md transition-all duration-300 shadow-lg ${
+        className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-md transition-all duration-300 ${
           isScrolled ? 'bg-white/90 py-2' : 'bg-white/80 py-4'
         }`}
+        style={{boxShadow:'0px 0px 6px 2px #0000001a'}}
       >
         <div className="max-w-6xl mx-auto px-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -192,7 +247,8 @@ const Home = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-white rounded-2xl p-8 mb-8 shadow-xl"
+          className="bg-white rounded-2xl p-8 mb-8"
+          style={{boxShadow:'0px 0px 6px 2px #0000001a'}}
         >
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
@@ -229,7 +285,8 @@ const Home = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="bg-white rounded-2xl p-8 shadow-xl"
+          className="bg-white rounded-2xl p-8"
+          style={{boxShadow:'0px 0px 6px 2px #0000001a'}}
         >
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
             <div>
@@ -298,11 +355,10 @@ const Home = () => {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.2 }}
-                    onClick={() => handleNotificationClick(notif.id)}
-                    className={`p-5 rounded-xl cursor-pointer transition-all duration-200 ${
+                    className={`p-5 rounded-xl transition-all duration-200 ${
                       notif.read 
-                        ? 'bg-gray-50 hover:bg-gray-100' 
-                        : `bg-gradient-to-r ${getTypeColor(notif.type)} hover:shadow-md`
+                        ? 'bg-gray-50' 
+                        : `bg-gradient-to-r ${getTypeColor(notif.type)}`
                     } ${
                       expandedNotification === notif.id ? 'ring-2 ring-blue-400' : ''
                     }`}
@@ -320,15 +376,36 @@ const Home = () => {
                           }`}>
                             {notif.text}
                           </p>
-                          <motion.button 
-                            whileHover={{ scale: 1.2 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => handleDelete(notif.id, e)}
-                            className="text-gray-400 hover:text-red-500 p-1"
-                            aria-label="Delete notification"
-                          >
-                            ✕
-                          </motion.button>
+                          <div className="flex gap-3">
+                            {!notif.read && (
+                              <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleNotificationClick(notif.id)
+                                }}
+                                className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded hover:bg-green-200"
+                                style={{boxShadow:'0px 0px 6px 2px #0000001a'}}
+                                aria-label="Mark as read"
+                              >
+                                Mark Read
+                              </motion.button>
+                            )}
+                            <motion.button 
+                              whileHover={{ scale: 1.2 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(notif.id, e);
+                              }}
+                              className="text-gray-400 hover:text-red-500 p-1 rounded-full"
+                              aria-label="Delete notification"
+                              style={{boxShadow:'0px 0px 6px 2px #0000001a'}}
+                            >
+                              ✕
+                            </motion.button>
+                          </div>
                         </div>
                         <p className="text-sm text-gray-500 mt-1">
                           {new Date(notif.createdAt).toLocaleString()}
