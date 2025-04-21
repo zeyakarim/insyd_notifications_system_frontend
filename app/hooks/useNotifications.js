@@ -9,7 +9,7 @@ const useNotifications = (sessionId, setSessionId) => {
 
     // Initialize socket connection
     useEffect(() => {
-        const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002', {
+        const socketInstance = io(process.env.NEXT_PUBLIC_API_URL, {
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
             autoConnect: true,
@@ -85,7 +85,7 @@ const useNotifications = (sessionId, setSessionId) => {
 
     const fetchNotifications = useCallback(async () => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/notifications`, {
                 headers: sessionId ? { 'X-Session-ID': sessionId } : {},
                 credentials: 'include'
             });
@@ -110,7 +110,7 @@ const useNotifications = (sessionId, setSessionId) => {
 
     const createNotification = useCallback(async (type, text) => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications/create`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/notifications/create`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -133,7 +133,7 @@ const useNotifications = (sessionId, setSessionId) => {
 
     const markAsReadNotification = useCallback(async (id) => {
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications/${id}/read`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/notifications/${id}/read`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',

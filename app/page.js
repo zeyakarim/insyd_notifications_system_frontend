@@ -194,7 +194,7 @@ const Home = () => {
               )}
             </motion.div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
-              Notification Center
+              Notification System
             </h1>
           </div>
           
@@ -458,13 +458,13 @@ const Home = () => {
               <div className="text-2xl p-2 bg-blue-500 text-white rounded-lg">
                 🔔
               </div>
-              <h2 className="text-xl font-bold">Notification Center</h2>
+              <h2 className="text-xl font-bold">Notification System</h2>
             </div>
             
             <div className="flex flex-col items-center md:items-end gap-1">
               <p className="text-gray-300">Stay connected with your updates</p>
               <p className="text-sm text-gray-400">
-                © {new Date().getFullYear()} Notification Center. All rights reserved.
+                © {new Date().getFullYear()} Notification System. All rights reserved.
               </p>
             </div>
           </div>
