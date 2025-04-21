@@ -1,41 +1,65 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 
-const useNotifications = (sessionId) => {
+const useNotifications = (sessionId, setSessionId) => {
     const [notifications, setNotifications] = useState([]);
     const [socket, setSocket] = useState(null);
+    const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
-        // Initialize socket connection
-        const newSocket = io('http://localhost:3002');
-        setSocket(newSocket);
+        const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002', {
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000,
+            autoConnect: true,
+        });
 
-        if (sessionId) {
-            newSocket.emit('register-session', sessionId);
-        }
+        setSocket(socketInstance);
 
-        // Cleanup on unmount
-        return () => newSocket.disconnect();
-    }, [sessionId]);
+        return () => {
+            socketInstance.disconnect();
+        };
+    }, []);
 
     useEffect(() => {
         if (!socket) return;
 
-        const handleNotification = (notification) => {
+        const onConnect = () => {
+            setIsConnected(true);
+            if (sessionId) {
+                socket.emit('register-session', sessionId);
+            }
+        };
+
+        const onDisconnect = () => setIsConnected(false);
+        const onNotification = (notification) => {
             setNotifications(prev => [notification, ...prev]);
         };
 
-        socket.on('new-notification', handleNotification);
-        return () => socket.off('new-notification', handleNotification);
-    }, [socket]);
+        socket.on('connect', onConnect);
+        socket.on('disconnect', onDisconnect);
+        socket.on('new-notification', onNotification);
+
+        return () => {
+            socket.off('connect', onConnect);
+            socket.off('disconnect', onDisconnect);
+            socket.off('new-notification', onNotification);
+        };
+    }, [socket, sessionId]);
 
     const fetchNotifications = async () => {
         try {
-            const res = await fetch('http://localhost:3002/api/notifications', {
-                headers: { 'X-Session-ID': sessionId }
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications`, {
+                headers: sessionId ? { 'X-Session-ID': sessionId } : {}
             });
-            const data = await res.json();
-            setNotifications(data);
+
+            const resSessionId = response.headers.get('X-Session-ID');
+            if (resSessionId && !sessionId) {
+                sessionStorage.setItem('sessionId', resSessionId);
+                setSessionId(resSessionId);
+            }
+
+            const { data } = await response.json();
+            setNotifications(data || []);
         } catch (err) {
             console.error('Failed to fetch notifications:', err);
         }
@@ -43,24 +67,26 @@ const useNotifications = (sessionId) => {
 
     const createNotification = async (type, text) => {
         try {
-            await fetch('http://localhost:3002/api/notifications', {
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications/create`, {
                 method: 'POST',
-                headers: { 
-                'Content-Type': 'application/json',
-                'X-Session-ID': sessionId 
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Session-ID': sessionId
                 },
                 body: JSON.stringify({ type, text })
             });
         } catch (err) {
             console.error('Failed to create notification:', err);
+            throw err;
         }
     };
 
     return {
         notifications,
         fetchNotifications,
-        createNotification
+        createNotification,
+        isConnected
     };
-}
+};
 
 export default useNotifications;
