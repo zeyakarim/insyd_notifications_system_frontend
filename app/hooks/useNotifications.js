@@ -153,11 +153,34 @@ const useNotifications = (sessionId, setSessionId) => {
         }
     }, [sessionId]);
 
+    const deleteNotification = useCallback(async (id) => {
+        try {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/notifications/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Session-ID': sessionId
+                },
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (err) {
+            console.error('Failed to create notification:', err);
+            throw err;
+        }
+    }, [sessionId]);
+
     return {
         notifications,
         fetchNotifications,
         createNotification,
         markAsReadNotification,
+        deleteNotification,
         isConnected,
         connectionError,
         socketId: socket?.id
