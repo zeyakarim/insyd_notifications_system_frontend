@@ -1,56 +1,98 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
 const useNotifications = (sessionId, setSessionId) => {
     const [notifications, setNotifications] = useState([]);
     const [socket, setSocket] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
+    const [connectionError, setConnectionError] = useState(null);
 
+    // Initialize socket connection
     useEffect(() => {
         const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002', {
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
             autoConnect: true,
+            transports: ['websocket'], // Force WebSocket transport
+            withCredentials: true,
+        });
+
+        // Connection events
+        socketInstance.on('connect', () => {
+            console.log('Socket connected:', socketInstance.id);
+            setIsConnected(true);
+            setConnectionError(null);
+            if (sessionId) {
+                socketInstance.emit('register-session', sessionId);
+            }
+        });
+
+        socketInstance.on('disconnect', (reason) => {
+            console.log('Socket disconnected:', reason);
+            setIsConnected(false);
+            if (reason === 'io server disconnect') {
+                // The disconnection was initiated by the server, you need to reconnect manually
+                socketInstance.connect();
+            }
+        });
+
+        socketInstance.on('connect_error', (err) => {
+            console.error('Connection error:', err.message);
+            setConnectionError(err.message);
+            setIsConnected(false);
+        });
+
+        socketInstance.on('reconnect_attempt', (attempt) => {
+            console.log(`Reconnection attempt ${attempt}`);
+        });
+
+        socketInstance.on('reconnect_error', (err) => {
+            console.error('Reconnection error:', err.message);
+        });
+
+        socketInstance.on('reconnect_failed', () => {
+            console.error('Reconnection failed');
+            setIsConnected(false);
         });
 
         setSocket(socketInstance);
 
         return () => {
+            socketInstance.off('connect');
+            socketInstance.off('disconnect');
+            socketInstance.off('connect_error');
+            socketInstance.off('reconnect_attempt');
+            socketInstance.off('reconnect_error');
+            socketInstance.off('reconnect_failed');
             socketInstance.disconnect();
         };
-    }, []);
+    }, [sessionId]);
 
+    // Notification handler
     useEffect(() => {
         if (!socket) return;
 
-        const onConnect = () => {
-            setIsConnected(true);
-            if (sessionId) {
-                socket.emit('register-session', sessionId);
-            }
-        };
-
-        const onDisconnect = () => setIsConnected(false);
         const onNotification = (notification) => {
             setNotifications(prev => [notification, ...prev]);
         };
 
-        socket.on('connect', onConnect);
-        socket.on('disconnect', onDisconnect);
         socket.on('new-notification', onNotification);
 
         return () => {
-            socket.off('connect', onConnect);
-            socket.off('disconnect', onDisconnect);
             socket.off('new-notification', onNotification);
         };
-    }, [socket, sessionId]);
+    }, [socket]);
 
-    const fetchNotifications = async () => {
+    const fetchNotifications = useCallback(async () => {
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications`, {
-                headers: sessionId ? { 'X-Session-ID': sessionId } : {}
+                headers: sessionId ? { 'X-Session-ID': sessionId } : {},
+                credentials: 'include'
             });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
             const resSessionId = response.headers.get('X-Session-ID');
             if (resSessionId && !sessionId) {
@@ -62,30 +104,40 @@ const useNotifications = (sessionId, setSessionId) => {
             setNotifications(data || []);
         } catch (err) {
             console.error('Failed to fetch notifications:', err);
+            throw err;
         }
-    };
+    }, [sessionId, setSessionId]);
 
-    const createNotification = async (type, text) => {
+    const createNotification = useCallback(async (type, text) => {
         try {
-            await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications/create`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/notifications/create`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-Session-ID': sessionId
                 },
-                body: JSON.stringify({ type, text })
+                body: JSON.stringify({ type, text }),
+                credentials: 'include'
             });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
         } catch (err) {
             console.error('Failed to create notification:', err);
             throw err;
         }
-    };
+    }, [sessionId]);
 
     return {
         notifications,
         fetchNotifications,
         createNotification,
-        isConnected
+        isConnected,
+        connectionError,
+        socketId: socket?.id
     };
 };
 
